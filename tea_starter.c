@@ -104,8 +104,8 @@ void cbc_encrypt(uint32_t * v, uint32_t vect[2], const uint32_t k[4], int nb_blo
         tmp[1] = v[j+1];
         
         // Addition avec le vecteur (xor)
-        tmp[0] += vect[0];
-        tmp[1] += vect[1];
+        tmp[0] ^= vect[0];
+        tmp[1] ^= vect[1];
 
         // Cryptage
         feistel_enc(tmp, k);
@@ -143,8 +143,8 @@ void cbc_decrypt(uint32_t * v, uint32_t vect[2], const uint32_t k[4], int nb_blo
         feistel_dec(tmp, k);
         
         // soustraction avec le vecteur
-        tmp[0] -= vect[0];
-        tmp[1] -= vect[1];
+        tmp[0] ^= vect[0];
+        tmp[1] ^= vect[1];
 
         v[j] = tmp[0];
         v[j+1] = tmp[1];
@@ -181,8 +181,8 @@ void ofb_encrypt(uint32_t * v, uint32_t * stream, int nb_blocks) {
     while (i < nb_blocks)
     {
         int j = 2*i;
-        v[j] += stream[j];
-        v[j+1] += stream[j+1];
+        v[j] ^= stream[j];
+        v[j+1] ^= stream[j+1];
         i++;
     }
 }
@@ -209,8 +209,8 @@ void hash(uint32_t *v, uint32_t vect[2], uint32_t h[2], int nb_blocks){
         key[3] = v[j+3];
 
         ecb_encrypt(tmp, key, 1);
-        vect[0] = tmp[0]+vect[0];
-        vect[1] = tmp[1]+vect[1];
+        vect[0] = tmp[0]^vect[0];
+        vect[1] = tmp[1]^vect[1];
 
         // Met a jour le resultat final
         h[0] = vect[0];
@@ -349,133 +349,196 @@ void attaque_tea(uint32_t *v,uint32_t k[4],uint32_t vect[2],int nb_block){
 }
 
 
+// FONCTION TEMPORAIRE
+void print_block(const char *label, uint32_t v[2]) {
+    printf("%s : %u %u\n", label, v[0], v[1]);
+}
 
-
-int main(){
-    uint32_t k[4];
-    uint32_t v[8];
-    uint32_t vect[2];
-    
-    //Key
-    k[0] = 0b01110100011110101010010010010010;
-    k[1] = 0b11110000101010100011010101101000;
-    k[2] = 0b00100010111010010111010110110011;
-    k[3] = 0b00001010110111010110100110100011;
-    
-    //Plaintext (4 blocks)
-    v[0] = 0b01010101010101010101010101010101;
-    v[1] = 0b11111111111111110000000000000000;
-    v[2] = 0b10101010101010101010101010101010;
-    v[3] = 0b10101010101010101010101010101010;
-    v[4] = 0b01010101010101010101010101010101;
-    v[5] = 0b01010101010101010101010101010101;
-    v[6] = 0b10101010101010101010101010101010;
-    v[7] = 0b10101010101010101010101010101010;
-    
-    //Initialisation vector
-    vect[0] = 0b00101101110101110101110010110001;
-    vect[1] = 0b01110101101101100010101101010011;
-    
-    
-    // Variable Temporaire
-    uint32_t n_k[4] = {k[0], k[1], k[2], k[3]};
-    uint32_t n_v[8] = {v[0],v[1],v[2],v[3],v[4],v[5],v[6],v[7]};
-    uint32_t n_vect[2] = {vect[0], vect[1]};
-    
-
-    
-    /*
-    printf("Plaintext:\n");
-    printf("%u\n",v[0]);
-    printf("%u\n",v[1]);
-    
-    //feistel_enc(v,k);
-    //ecb_encrypt(v,k,4);
-
-    //uint32_t iv[2] = { vect[0], vect[1] }; // Pour eviter les effets de bords
-    //cbc_encrypt(v,vect,k,4);
-    
-    printf("Ciphertext:\n");
-    printf("%u\n",v[0]);
-    printf("%u\n",v[1]);
-    
-    //feistel_dec(v,k);
-    //ecb_decrypt(v,k,4);
-
-    //uint32_t iv_dec[2] = { iv[0], iv[1] };  // Pour eviter les effets de bords
-    //cbc_decrypt(v,iv_dec,k,4);
-   
-    printf("Decryption:\n");
-    printf("%u\n",v[0]);
-    printf("%u\n",v[1]);
-
-    printf("\n\n\n");
-    uint32_t *c = hash_mac(v, vect, k, 4);
-
-    printf("c : %u, %u\n", c[0], c[1]);
-    printf("\n\n");
-
-    int test = hash_mac_verification(n_v,n_k,c,n_vect,4);
-    if(test == 1){
-        printf("verification valide-> %d\n", test);
+void copy_msg(uint32_t *dst, uint32_t *src, int size) {
+    for (int i = 0; i < size; i++) {
+        dst[i] = src[i];
     }
-    else{
-        printf("Verification invalide %d\n", test);
-   }
-   
+}
 
-    // TEST de cbc_encryp_mac
+void copy_vect(uint32_t dst[2], uint32_t src[2]) {
+    dst[0] = src[0];
+    dst[1] = src[1];
+}
 
-    printf("Message Initiale : %u %u\n", v[0], v[1]);
+void copy_key(uint32_t dst[4], uint32_t src[4]) {
+    for (int i = 0; i < 4; i++) {
+        dst[i] = src[i];
+    }
+}
 
-    uint32_t *code = cbc_encrypt_mac(v,k,vect,n_vect,4);
-    if (code==NULL)
+
+int main() {
+    uint32_t k[4] = {
+        0b01110100011110101010010010010010,
+        0b11110000101010100011010101101000,
+        0b00100010111010010111010110110011,
+        0b00001010110111010110100110100011
+    };
+
+    uint32_t v[8] = {
+        0b01010101010101010101010101010101,
+        0b11111111111111110000000000000000,
+        0b10101010101010101010101010101010,
+        0b10101010101010101010101010101010,
+        0b01010101010101010101010101010101,
+        0b01010101010101010101010101010101,
+        0b10101010101010101010101010101010,
+        0b10101010101010101010101010101010
+    };
+
+    uint32_t iv[2] = {
+        0b00101101110101110101110010110001,
+        0b01110101101101100010101101010011
+    };
+
+    uint32_t iv_hash[2] = {
+        iv[0],
+        iv[1]
+    };
+
+    int nb_blocks = 4;
+
+    printf("\n=== TEST 1 : Feistel bloc simple ===\n");
     {
-        printf("erreur-code\n");
+        uint32_t bloc[2] = {v[0], v[1]};
+        uint32_t original[2] = {v[0], v[1]};
+
+        print_block("Message original", bloc);
+
+        feistel_enc(bloc, k);
+        print_block("Chiffré", bloc);
+
+        feistel_dec(bloc, k);
+        print_block("Déchiffré", bloc);
     }
-    
-    int x = cbc_decrypt_mac(v,code,n_k,vect,n_vect,4);
- */
 
-    // EXPLOITATION DE FAILLE TEA
+    printf("\n=== TEST 2 : ECB ===\n");
+    {
+        uint32_t msg[8];
+        copy_msg(msg, v, 8);
 
-    /* Verification de la propriete 
-    feistel_enc(v,k);
-    printf("Message chiffrer : %u %u\n", v[0], v[1]);
+        ecb_encrypt(msg, k, nb_blocks);
+        printf("ECB chiffré : %u %u ...\n", msg[0], msg[1]);
 
-    //Key
-    k[0] = 0b11110100011110101010010010010010;
-    k[1] = 0b01110000101010100011010101101000;
-    k[2] = 0b00100010111010010111010110110011;
-    k[3] = 0b00001010110111010110100110100011;
-    
-    feistel_enc(n_v,k);
-    printf("Message chiffrer apres modification des bits : %u %u\n", n_v[0], n_v[1]);
- */
- /*
-    //Verification de Collision
-    uint32_t resultat[2];
-    hash(v,vect,resultat,4);
-    printf("Message hacher : %u %u\n", resultat[0], resultat[1]);
-   
+        ecb_decrypt(msg, k, nb_blocks);
+        printf("ECB déchiffré : %u %u %u %u ...\n", msg[0], msg[1], msg[2], msg[3]);
 
-     //Plaintext (4 blocks)
-    v[0] = 0b11010101010101010101010101010101;  // modifier
-    v[1] = 0b01111111111111110000000000000000;  // modifier
-    v[2] = 0b00101010101010101010101010101010;  // modifier
-    v[3] = 0b00101010101010101010101010101010;  // modifier
-    v[4] = 0b01010101010101010101010101010101;
-    v[5] = 0b01010101010101010101010101010101;
-    v[6] = 0b10101010101010101010101010101010;
-    v[7] = 0b10101010101010101010101010101010;
-    uint32_t res[2];
-    hash(v,n_vect,res,4);
-    printf("Message hacher apres alteration du message : %u %u\n", res[0], res[1]);
- */
+    }
 
-   // Verification de l'attaque
-   attaque_tea(v,k,vect,4);
+    printf("\n=== TEST 3 : CBC ===\n");
+    {
+        uint32_t msg[8];
+        uint32_t iv_enc[2];
+        uint32_t iv_dec[2];
 
+        copy_msg(msg, v, 8);
+        copy_vect(iv_enc, iv);
+        copy_vect(iv_dec, iv);
+
+        cbc_encrypt(msg, iv_enc, k, nb_blocks);
+        printf("CBC chiffré : %u %u ...\n", msg[0], msg[1]);
+
+        cbc_decrypt(msg, iv_dec, k, nb_blocks);
+        printf("CBC déchiffré : %u %u ...\n", msg[0], msg[1]);
+
+    }
+
+    printf("\n=== TEST 4 : OFB ===\n");
+    {
+        uint32_t msg[8];
+        uint32_t stream[8];
+        uint32_t iv_ofb[2];
+
+        copy_msg(msg, v, 8);
+        copy_vect(iv_ofb, iv);
+
+        ofb_stream(stream, iv_ofb, k, nb_blocks);
+        ofb_encrypt(msg, stream, nb_blocks);
+        printf("OFB chiffré : %u %u ...\n", msg[0], msg[1]);
+
+        ofb_encrypt(msg, stream, nb_blocks);
+        printf("OFB déchiffré : %u %u ...\n", msg[0], msg[1]);
+    }
+
+    printf("\n=== TEST 5 : Hash ===\n");
+    {
+        uint32_t msg[8];
+        uint32_t h[2];  // Pour stocker le resultat du hache generer
+        uint32_t ivh[2];
+
+        copy_msg(msg, v, 8);
+        copy_vect(ivh, iv_hash);
+
+        hash(msg, ivh, h, nb_blocks);
+        printf("Hash : %u %u\n", h[0], h[1]);
+    }
+
+    printf("\n=== TEST 6 : HMAC ===\n");
+    {
+        uint32_t msg[8];
+        uint32_t ivh[2];
+
+        copy_msg(msg, v, 8);
+        copy_vect(ivh, iv_hash);
+
+        uint32_t *mac = hash_mac(msg, ivh, k, nb_blocks);
+        printf("MAC : %u %u\n", mac[0], mac[1]);
+
+        uint32_t ivh_verif[2];
+        copy_vect(ivh_verif, iv_hash);
+
+        int ok = hash_mac_verification(msg, k, mac, ivh_verif, nb_blocks);
+
+        if (ok)
+            printf("Vérification MAC : OK\n");
+        else
+            printf("Vérification MAC : ERREUR\n");
+
+        free(mac);
+    }
+
+    printf("\n=== TEST 7 : CBC + MAC ===\n");
+    {
+        uint32_t msg[8];
+        uint32_t iv_enc[2];
+        uint32_t iv_dec[2];
+        uint32_t ivh[2];
+
+        copy_msg(msg, v, 8);
+        copy_vect(iv_enc, iv);
+        copy_vect(iv_dec, iv);
+        copy_vect(ivh, iv_hash);
+
+        uint32_t *code = cbc_encrypt_mac(msg, k, iv_enc, ivh, nb_blocks);
+
+        uint32_t ivh_verif[2];
+        copy_vect(ivh_verif, iv_hash);
+
+        int ok = cbc_decrypt_mac(msg, code, k, iv_dec, ivh_verif, nb_blocks);
+
+        if (ok)
+            printf("Déchiffrement authentifié : OK\n");
+        else
+            printf("Déchiffrement authentifié : ERREUR\n");
+
+        free(code);
+    }
+
+    printf("\n=== TEST 8 : Attaque TEA ===\n");
+    {
+        uint32_t msg[8];
+        uint32_t iv_attack[2];
+
+        copy_msg(msg, v, 8);
+        copy_vect(iv_attack, iv_hash);
+
+        attaque_tea(msg, k, iv_attack, nb_blocks);
+    }
 
     return 0;
 }
